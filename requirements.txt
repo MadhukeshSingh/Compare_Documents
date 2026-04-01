@@ -16,3 +16,6 @@ Pillow>=10.0.0           # PIL — highlight overlay rendering
 
 # ── Diff / standard library (already included, listed for clarity) ─────────
 # difflib — standard library, no install needed
+# Streamlit Cloud system packages
+# PyMuPDF and Pillow are pure Python/wheels — no system deps needed.
+# If you add LibreOffice support later, add: libreoffice

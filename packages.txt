@@ -1,3 +1,0 @@
-# Streamlit Cloud system packages
-# PyMuPDF and Pillow are pure Python/wheels — no system deps needed.
-# If you add LibreOffice support later, add: libreoffice
