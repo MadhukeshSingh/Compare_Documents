@@ -325,24 +325,87 @@ def _fmt_size(size: int) -> str:
     return f"{size/(1024*1024):.1f} MB"
 
 
-def _render_html_pane(html: str, height: int = 580) -> None:
-    """Render HTML content inside a scrollable dark pane."""
-    wrapped = f"""
-    <div class="html-scroll" style="height:{height}px">
-        {html}
-    </div>
+def _render_html_pane(html: str, height: int = 600) -> None:
+    """Render HTML inside a self-contained dark iframe (styles included inline)."""
+    doc = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{
+  background:#080e18;color:#cdd9e5;
+  font-family:'Segoe UI',Inter,Arial,sans-serif;
+  font-size:14px;line-height:1.75;
+  padding:16px 20px;
+}}
+p,li{{margin:0.4em 0}}
+h1{{font-size:1.5em;color:#e0f0ff;margin:0.8em 0 0.3em}}
+h2{{font-size:1.25em;color:#c0d8f0;margin:0.7em 0 0.3em}}
+h3,h4,h5,h6{{font-size:1em;color:#a0c4e0;margin:0.6em 0 0.2em}}
+a{{color:#00d4ff}}
+ul,ol{{padding-left:1.4em;margin:0.4em 0}}
+table{{border-collapse:collapse;width:100%;margin:0.5em 0}}
+th{{background:#0d1f35;color:#a0c4e0;padding:7px 12px;border:1px solid #1e3a5f;text-align:left}}
+td{{padding:6px 12px;border:1px solid #1e3a5f}}
+code{{background:#0d1421;border-radius:3px;padding:1px 5px;
+      font-family:'JetBrains Mono',Consolas,monospace;font-size:12px}}
+pre{{background:#0d1117;border-radius:6px;padding:12px;overflow-x:auto;margin:0.5em 0}}
+pre code{{padding:0;background:none}}
+mark{{border-radius:3px;padding:1px 3px}}
+::-webkit-scrollbar{{width:6px;height:6px}}
+::-webkit-scrollbar-track{{background:#0a1220}}
+::-webkit-scrollbar-thumb{{background:#1e3a5f;border-radius:3px}}
+::-webkit-scrollbar-thumb:hover{{background:#2a5a8f}}
+</style></head><body>
+{html}
+</body></html>"""
+    st.components.v1.html(doc, height=height, scrolling=True)
+
+
+def _render_pdf_scrollable(
+    pdf_bytes: bytes,
+    changes,
+    side: str,
+    height: int = 640,
+) -> None:
     """
-    st.components.v1.html(wrapped, height=height + 4, scrolling=False)
+    Render ALL PDF pages (up to 20) with highlights stacked in a
+    single scrollable dark container — no page-flip needed.
+    """
+    page_count = get_pdf_page_count(pdf_bytes)
+    cap = min(page_count, 20)
 
+    parts: list[str] = []
+    for pn in range(1, cap + 1):
+        png = render_pdf_page_with_highlights(pdf_bytes, pn, changes, side, zoom=1.3)
+        if png:
+            b64 = _b64(png)
+            parts.append(
+                f'<div style="margin-bottom:6px">'
+                f'<div style="font-size:11px;color:#4a6a8a;padding:3px 8px;'
+                f'background:#0d1421;border-bottom:1px solid #1e3a5f">Page {pn} / {page_count}</div>'
+                f'<img src="data:image/png;base64,{b64}" '
+                f'style="width:100%;display:block;vertical-align:top"/>'
+                f'</div>'
+            )
 
-def _render_pdf_page(pdf_bytes: bytes, page_num: int,
-                     changes, side: str, zoom: float = 1.5) -> None:
-    """Render one PDF page with highlights as an image."""
-    png = render_pdf_page_with_highlights(pdf_bytes, page_num, changes, side, zoom)
-    if png:
-        st.image(png, use_container_width=True)
-    else:
-        st.warning("Could not render page.")
+    footer = (
+        f'<p style="color:#4a6a8a;text-align:center;font-size:11px;padding:10px 0">'
+        f'Showing first {cap} of {page_count} pages</p>'
+        if page_count > cap else ''
+    )
+
+    container = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#080e18;padding:0}}
+::-webkit-scrollbar{{width:6px}}
+::-webkit-scrollbar-track{{background:#0a1220}}
+::-webkit-scrollbar-thumb{{background:#1e3a5f;border-radius:3px}}
+::-webkit-scrollbar-thumb:hover{{background:#2a5a8f}}
+</style></head><body>
+{''.join(parts)}
+{footer}
+</body></html>"""
+    st.components.v1.html(container, height=height, scrolling=True)
 
 
 def _analytics_html(summary: dict) -> str:
@@ -391,14 +454,11 @@ def _legend_html() -> str:
 
 # ── Session state keys ────────────────────────────────────────────────────────
 SS_RESULT = "diff_result"
-SS_PAGE1 = "page1"
-SS_PAGE2 = "page2"
 
 
 def _init_state():
-    for k, v in [(SS_RESULT, None), (SS_PAGE1, 1), (SS_PAGE2, 1)]:
-        if k not in st.session_state:
-            st.session_state[k] = v
+    if SS_RESULT not in st.session_state:
+        st.session_state[SS_RESULT] = None
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
@@ -536,8 +596,6 @@ def main():
 
     # ── Run comparison ────────────────────────────────────────────────────────
     if compare_clicked and file1 and file2:
-        st.session_state[SS_PAGE1] = 1
-        st.session_state[SS_PAGE2] = 1
         with st.spinner("Analysing documents…"):
             try:
                 req = CompareRequest(
@@ -574,12 +632,12 @@ def main():
         for col, (label, val, color) in zip(metric_cols, metrics):
             with col:
                 st.markdown(
-                    f'<div style="background:#0d1421;border:1px solid {color}33;border-radius:12px;'
+                    f'<div style="background:#0d1421;border:1px solid {color}55;border-radius:12px;'
                     f'padding:14px 12px;text-align:center">'
-                    f'<div style="font-size:1.8rem;font-weight:700;color:{color};'
-                    f'font-family:JetBrains Mono,monospace">{val}</div>'
-                    f'<div style="font-size:0.7rem;color:{color}88;letter-spacing:1.5px;'
-                    f'text-transform:uppercase;margin-top:4px">{label}</div>'
+                    f'<div style="font-size:1.9rem;font-weight:700;color:{color};'
+                    f'font-family:JetBrains Mono,monospace;line-height:1">{val}</div>'
+                    f'<div style="font-size:0.78rem;color:{color};opacity:0.85;letter-spacing:1px;'
+                    f'text-transform:uppercase;margin-top:6px;font-weight:600">{label}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -603,27 +661,12 @@ def main():
                 )
 
                 if result.doc1_type == 'pdf' and result.doc1_pdf_bytes:
-                    pages1 = get_pdf_page_count(result.doc1_pdf_bytes)
-                    page1 = st.number_input(
-                        "Page", min_value=1, max_value=pages1,
-                        value=st.session_state[SS_PAGE1],
-                        key="page1_input", label_visibility="collapsed"
-                    )
-                    st.session_state[SS_PAGE1] = page1
-                    st.caption(f"Page {page1} of {pages1}")
-                    _render_pdf_page(
-                        result.doc1_pdf_bytes, page1,
-                        result.word_changes, 'doc1'
-                    )
-
-                elif result.doc1_type == 'html' and result.doc1_html:
-                    highlighted = inject_html_highlights(
-                        result.doc1_html, result.word_changes, 'doc1'
-                    )
-                    _render_html_pane(highlighted)
+                    with st.spinner("Rendering pages…"):
+                        _render_pdf_scrollable(
+                            result.doc1_pdf_bytes, result.word_changes, 'doc1'
+                        )
 
                 else:
-                    # plain text / code
                     highlighted = inject_html_highlights(
                         result.doc1_html or "", result.word_changes, 'doc1'
                     )
@@ -640,24 +683,10 @@ def main():
                 )
 
                 if result.doc2_type == 'pdf' and result.doc2_pdf_bytes:
-                    pages2 = get_pdf_page_count(result.doc2_pdf_bytes)
-                    page2 = st.number_input(
-                        "Page", min_value=1, max_value=pages2,
-                        value=st.session_state[SS_PAGE2],
-                        key="page2_input", label_visibility="collapsed"
-                    )
-                    st.session_state[SS_PAGE2] = page2
-                    st.caption(f"Page {page2} of {pages2}")
-                    _render_pdf_page(
-                        result.doc2_pdf_bytes, page2,
-                        result.word_changes, 'doc2'
-                    )
-
-                elif result.doc2_type == 'html' and result.doc2_html:
-                    highlighted = inject_html_highlights(
-                        result.doc2_html, result.word_changes, 'doc2'
-                    )
-                    _render_html_pane(highlighted)
+                    with st.spinner("Rendering pages…"):
+                        _render_pdf_scrollable(
+                            result.doc2_pdf_bytes, result.word_changes, 'doc2'
+                        )
 
                 else:
                     highlighted = inject_html_highlights(

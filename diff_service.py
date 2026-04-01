@@ -355,7 +355,8 @@ def inject_html_highlights(
 ) -> str:
     """
     Inject <mark> highlights into HTML preview for DOCX/text content.
-    Words are matched by text content (line-level for text, word-level for DOCX).
+    Words are matched by text content. Only text nodes are modified —
+    content inside HTML tags (<...>) is left untouched.
     """
     if not changes:
         return base_html
@@ -379,7 +380,8 @@ def inject_html_highlights(
 
     def wrap_word(m: re.Match) -> str:
         word = m.group(0)
-        clean = word.strip()
+        # Strip leading/trailing punctuation for lookup but keep original for output
+        clean = re.sub(r'^[^\w]+|[^\w]+$', '', word)
         if clean in removed_words:
             return f'<mark style="background:#ff5050;color:#fff;border-radius:3px;padding:1px 3px">{word}</mark>'
         if clean in added_words:
@@ -390,7 +392,15 @@ def inject_html_highlights(
             return f'<mark style="background:#3cb4ff;color:#fff;border-radius:3px;padding:1px 3px">{word}</mark>'
         return word
 
-    return re.sub(r'\b\S+\b', wrap_word, base_html)
+    # Split on HTML tags so we only replace inside text nodes, never inside <tag ...>
+    parts = re.split(r'(<[^>]+>)', base_html)
+    result = []
+    for part in parts:
+        if part.startswith('<'):
+            result.append(part)          # keep HTML tags verbatim
+        else:
+            result.append(re.sub(r'\S+', wrap_word, part))
+    return ''.join(result)
 
 
 # ---------------------------------------------------------------------------
