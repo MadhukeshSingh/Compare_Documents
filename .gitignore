@@ -1,0 +1,82 @@
+# ── Virtual environments ───────────────────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+ENV/
+venv.bak/
+
+# ── Python cache ───────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# ── Distribution / packaging ───────────────────────────────────────────────
+build/
+dist/
+eggs/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+*.whl
+
+# ── Environment variables / secrets ───────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.secret
+secrets.toml
+
+# ── IDE / editors ──────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Temp / intermediate files ──────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.temp
+docdiff_*/          # tempfile dirs created by DocumentExtractor
+
+# ── Uploaded / extracted files (not needed in repo) ───────────────────────
+uploads/
+converted_pdfs/
+extracted_images/
+docs/
+
+# ── Logs ──────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Jupyter ────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── pytest / coverage ─────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+nosetests.xml
+coverage.xml
+
+# ── mypy / type checkers ──────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+.pyright/
+
+# ── Streamlit ─────────────────────────────────────────────────────────────
+.streamlit/secrets.toml
